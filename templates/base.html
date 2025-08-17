@@ -12,6 +12,13 @@
         body { font-family: 'Inter', sans-serif; }
         .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
         .card-shadow { box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        .loader {
+            border-top-color: #3498db;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
     
     {% block extra_head %}{% endblock %}
@@ -133,35 +140,43 @@
 <!-- Upload Modal -->
 <div id="uploadModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center z-50">
     <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
-        <h2 class="text-2xl font-bold mb-6 text-gray-800">Upload Document</h2>
-        <form id="uploadForm" class="space-y-4" enctype="multipart/form-data">
-            <div>
-                <label for="documentFile" class="block text-sm font-medium text-gray-700">Select Document</label>
-                <input type="file" id="documentFile" name="file" required
-                       class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+        <div id="uploadSpinner" class="hidden">
+            <div class="flex justify-center items-center">
+                <div class="loader ease-linear rounded-full border-8 border-t-8 border-gray-200 h-32 w-32"></div>
             </div>
-            <div>
-                <label for="uploadLanguage" class="block text-sm font-medium text-gray-700">Language</label>
-                <select id="uploadLanguage" name="language"
-                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                    <option value="en">English</option>
-                    <option value="hi">Hindi</option>
-                    <option value="mr">Marathi</option>
-                </select>
-            </div>
-            <div id="uploadError" class="text-red-500 text-sm hidden"></div>
-            <div id="uploadSuccess" class="text-green-600 text-sm hidden"></div>
-            <div class="flex justify-end space-x-3">
-                <button type="button" id="cancelUpload"
-                        class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                    Cancel
-                </button>
-                <button type="submit"
-                        class="px-4 py-2 bg-indigo-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                    Upload
-                </button>
-            </div>
-        </form>
+            <p class="text-center mt-4">Uploading and processing your document... Please wait.</p>
+        </div>
+        <div id="uploadFormContainer">
+            <h2 class="text-2xl font-bold mb-6 text-gray-800">Upload Document</h2>
+            <form id="uploadForm" class="space-y-4" enctype="multipart/form-data">
+                <div>
+                    <label for="documentFile" class="block text-sm font-medium text-gray-700">Select Document</label>
+                    <input type="file" id="documentFile" name="file" required
+                           class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                </div>
+                <div>
+                    <label for="uploadLanguage" class="block text-sm font-medium text-gray-700">Language</label>
+                    <select id="uploadLanguage" name="language"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        <option value="en">English</option>
+                        <option value="hi">Hindi</option>
+                        <option value="mr">Marathi</option>
+                    </select>
+                </div>
+                <div id="uploadError" class="text-red-500 text-sm hidden"></div>
+                <div id="uploadSuccess" class="text-green-600 text-sm hidden"></div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" id="cancelUpload"
+                            class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Cancel
+                    </button>
+                    <button type="submit" id="uploadSubmitButton"
+                            class="px-4 py-2 bg-indigo-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Upload
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -505,6 +520,9 @@ function setupUploadModal() {
     const cancelUpload = document.getElementById('cancelUpload');
     const uploadError = document.getElementById('uploadError');
     const uploadSuccess = document.getElementById('uploadSuccess');
+    const uploadSpinner = document.getElementById('uploadSpinner');
+    const uploadFormContainer = document.getElementById('uploadFormContainer');
+    const uploadSubmitButton = document.getElementById('uploadSubmitButton');
 
     if (cancelUpload) {
         cancelUpload.addEventListener('click', () => {
@@ -513,6 +531,8 @@ function setupUploadModal() {
             if (uploadError) uploadError.classList.add('hidden');
             if (uploadSuccess) uploadSuccess.classList.add('hidden');
             if (uploadForm) uploadForm.reset();
+            uploadSpinner.classList.add('hidden');
+            uploadFormContainer.classList.remove('hidden');
         });
     }
 
@@ -546,6 +566,11 @@ function setupUploadModal() {
             formData.append('file', file);
             formData.append('language', language);
 
+            // Show spinner and disable button
+            uploadSpinner.classList.remove('hidden');
+            uploadFormContainer.classList.add('hidden');
+            uploadSubmitButton.disabled = true;
+
             try {
                 const res = await fetch('/api/v1/documents/upload', {
                     method: 'POST',
@@ -567,19 +592,31 @@ function setupUploadModal() {
                     if (typeof fetchDocuments === 'function') {
                         fetchDocuments();
                     }
+                    setTimeout(() => {
+                        uploadModal.classList.add('hidden');
+                        uploadModal.classList.remove('flex');
+                        uploadSpinner.classList.add('hidden');
+                        uploadFormContainer.classList.remove('hidden');
+                    }, 2000); // Keep success message for 2 seconds
                 } else {
                     const errorData = await res.json();
                     if (uploadError) {
                         uploadError.textContent = errorData.detail || 'Failed to upload document.';
                         uploadError.classList.remove('hidden');
                     }
+                    uploadSpinner.classList.add('hidden');
+                    uploadFormContainer.classList.remove('hidden');
                 }
             } catch (err) {
                 if (uploadError) {
                     uploadError.textContent = 'Could not connect to the server to upload document.';
                     uploadError.classList.remove('hidden');
                 }
+                uploadSpinner.classList.add('hidden');
+                uploadFormContainer.classList.remove('hidden');
                 console.error('Error uploading document:', err);
+            } finally {
+                uploadSubmitButton.disabled = false;
             }
         });
     }
