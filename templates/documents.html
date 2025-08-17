@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+
+{% block title %}My Documents - NyayEase{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div class="flex justify-between items-center mb-8">
+        <h1 class="text-4xl font-bold text-gray-800">My Uploaded Documents</h1>
+        <button id="uploadDocumentButton" class="bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition">
+            Upload New Document
+        </button>
+    </div>
+
+        <div id="documentsListContainer">
+        <div class="text-center py-16 border-2 border-dashed border-gray-300 rounded-xl">
+            <p class="text-2xl text-gray-500">Loading documents...</p>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', async function() {
+    const documentsListContainer = document.getElementById('documentsListContainer');
+
+    async function fetchDocuments() {
+        documentsListContainer.innerHTML = `
+            <div class="text-center py-16 border-2 border-dashed border-gray-300 rounded-xl">
+                <p class="text-2xl text-gray-500">Loading documents...</p>
+            </div>
+        `;
+        const token = localStorage.getItem('access_token');
+
+        if (!token) {
+            documentsListContainer.innerHTML = `
+                <div class="text-center py-16 border-2 border-dashed border-gray-300 rounded-xl">
+                    <p class="text-2xl text-gray-500">Please log in to view your documents.</p>
+                    <p class="text-gray-400 mt-2">Click the "Login" button in the navigation bar.</p>
+                </div>
+            `;
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/v1/documents/list', {
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (res.ok) {
+                const documents = await res.json();
+                if (documents.length > 0) {
+                    let documentsHtml = `
+                        <div class="bg-white shadow-lg rounded-xl overflow-hidden">
+                            <ul class="divide-y divide-gray-200">
+                    `;
+                    documents.forEach(doc => {
+                        const uploadDate = new Date(doc.upload_date);
+                        const formattedDate = uploadDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                        documentsHtml += `
+                            <li class="p-6 hover:bg-gray-50 transition cursor-pointer" data-document-id="${doc.id}">
+                                <div class="flex justify-between items-center">
+                                    <div>
+                                        <p class="text-lg font-semibold text-indigo-700">${doc.filename}</p>
+                                        <p class="text-sm text-gray-500">Uploaded on: ${formattedDate}</p>
+                                    </div>
+                                    <span class="text-gray-400 hover:text-indigo-600">→</span>
+                                </div>
+                            </li>
+                        `;
+                    });
+                    documentsHtml += `
+                            </ul>
+                        </div>
+                    `;
+                    documentsListContainer.innerHTML = documentsHtml;
+                } else {
+                    documentsListContainer.innerHTML = `
+                        <div class="text-center py-16 border-2 border-dashed border-gray-300 rounded-xl">
+                            <p class="text-2xl text-gray-500">You haven't uploaded any documents yet.</p>
+                            <p class="text-gray-400 mt-2">Click the "Upload New Document" button above to get started.</p>
+                        </div>
+                    `;
+                }
+            } else if (res.status === 401) {
+                documentsListContainer.innerHTML = `
+                    <div class="text-center py-16 border-2 border-dashed border-gray-300 rounded-xl">
+                        <p class="text-2xl text-gray-500">Your session has expired or you are not logged in.</p>
+                        <p class="text-400 mt-2">Please log in again to view your documents.</p>
+                    </div>
+                `;
+                localStorage.removeItem('access_token'); // Clear invalid token
+            } else {
+                const errorData = await res.json();
+                documentsListContainer.innerHTML = `
+                    <div class="text-center py-16 border-2 border-dashed border-gray-300 rounded-xl text-red-600">
+                        <p class="text-2xl">Error loading documents: ${errorData.detail || 'Unknown error'}</p>
+                    </div>
+                `;
+            }
+        } catch (err) {
+            documentsListContainer.innerHTML = `
+                <div class="text-center py-16 border-2 border-dashed border-gray-300 rounded-xl text-red-600">
+                    <p class="text-2xl">Could not connect to the server to load documents.</p>
+                </div>
+            `;
+            console.error('Error fetching documents:', err);
+        }
+    }
+
+    fetchDocuments();
+
+    // Upload Modal functionality
+    const uploadDocumentButton = document.getElementById('uploadDocumentButton');
+    const uploadModal = document.getElementById('uploadModal');
+    const cancelUpload = document.getElementById('cancelUpload');
+    const uploadForm = document.getElementById('uploadForm');
+    const documentFile = document.getElementById('documentFile');
+    const uploadLanguage = document.getElementById('uploadLanguage');
+    const uploadError = document.getElementById('uploadError');
+    const uploadSuccess = document.getElementById('uploadSuccess');
+
+    uploadDocumentButton.addEventListener('click', () => {
+        uploadModal.classList.remove('hidden');
+        uploadModal.classList.add('flex');
+        uploadError.classList.add('hidden');
+        uploadSuccess.classList.add('hidden');
+        uploadForm.reset();
+    });
+
+    cancelUpload.addEventListener('click', () => {
+        uploadModal.classList.add('hidden');
+        uploadModal.classList.remove('flex');
+        uploadError.classList.add('hidden');
+        uploadSuccess.classList.add('hidden');
+        uploadForm.reset();
+    });
+
+    uploadForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        uploadError.classList.add('hidden');
+        uploadSuccess.classList.add('hidden');
+
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            uploadError.textContent = 'You must be logged in to upload documents.';
+            uploadError.classList.remove('hidden');
+            return;
+        }
+
+        const file = documentFile.files[0];
+        const language = uploadLanguage.value;
+
+        if (!file) {
+            uploadError.textContent = 'Please select a file to upload.';
+            uploadError.classList.remove('hidden');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('language', language);
+
+        try {
+            const res = await fetch('/api/v1/documents/upload', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                },
+                body: formData,
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                uploadSuccess.textContent = `Document "${data.filename}" uploaded and analyzed successfully!`;
+                uploadSuccess.classList.remove('hidden');
+                uploadForm.reset();
+                // Optionally, refresh the documents list after successful upload
+                fetchDocuments();
+            } else {
+                const errorData = await res.json();
+                uploadError.textContent = errorData.detail || 'Failed to upload document.';
+                uploadError.classList.remove('hidden');
+            }
+        } catch (err) {
+            uploadError.textContent = 'Could not connect to the server to upload document.';
+            uploadError.classList.remove('hidden');
+            console.error('Error uploading document:', err);
+        }
+    });
+
+    // Document Details Modal functionality
+    const documentDetailsModal = document.getElementById('documentDetailsModal');
+    const closeDocumentDetails = document.getElementById('closeDocumentDetails');
+    const documentDetailsTitle = document.getElementById('documentDetailsTitle');
+    const documentDetailsContent = document.getElementById('documentDetailsContent');
+
+    closeDocumentDetails.addEventListener('click', () => {
+        documentDetailsModal.classList.add('hidden');
+        documentDetailsModal.classList.remove('flex');
+    });
+
+        documentsListContainer.addEventListener('click', async (e) => {
+        const listItem = e.target.closest('li[data-document-id]');
+        if (listItem) {
+            const documentId = listItem.dataset.documentId;
+            const token = localStorage.getItem('access_token');
+
+            if (!token) {
+                alert('Please log in to view document details.');
+                return;
+            }
+
+            documentDetailsTitle.textContent = 'Loading Document...';
+            documentDetailsContent.innerHTML = '<p>Fetching details...</p>';
+            documentDetailsModal.classList.remove('hidden');
+            documentDetailsModal.classList.add('flex');
+
+            try {
+                const res = await fetch(`/api/v1/documents/${documentId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': 'Bearer ' + token,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (res.ok) {
+                    const doc = await res.json();
+                    documentDetailsTitle.textContent = doc.filename;
+                    documentDetailsContent.innerHTML = `
+                        <h3 class="text-xl font-semibold mb-2">Extracted Text:</h3>
+                        <p class="mb-4">${doc.extracted_text}</p>
+                        <h3 class="text-xl font-semibold mb-2">Analysis Result:</h3>
+                        <p>${doc.analysis_result}</p>
+                    `;
+                    // Store document ID for chat
+                    documentDetailsModal.dataset.currentDocumentId = doc.id;
+                } else if (res.status === 401) {
+                    documentDetailsContent.innerHTML = '<p class="text-red-500">Your session has expired or you are not authorized. Please log in again.</p>';
+                    localStorage.removeItem('access_token');
+                } else {
+                    const errorData = await res.json();
+                    documentDetailsContent.innerHTML = `<p class="text-red-500">Error: ${errorData.detail || 'Could not fetch document details.'}</p>`;
+                }
+            } catch (err) {
+                documentDetailsContent.innerHTML = '<p class="text-red-500">Could not connect to the server to fetch document details.</p>';
+                console.error('Error fetching document details:', err);
+            }
+        }
+    });
+
+    // Chat about document functionality
+    const chatAboutDocumentButton = document.getElementById('chatAboutDocumentButton');
+    const chatDocumentIdInput = document.getElementById('chatDocumentId');
+
+    chatAboutDocumentButton.addEventListener('click', () => {
+        const currentDocumentId = documentDetailsModal.dataset.currentDocumentId;
+        if (currentDocumentId) {
+            chatDocumentIdInput.value = currentDocumentId;
+            window.location.href = '/chat'; // Navigate to chat page
+        } else {
+            alert('No document selected to chat about.');
+        }
+    });
+});
+});
+</script>
+</div>
+{% endblock %}

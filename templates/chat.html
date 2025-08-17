@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+
+{% block title %}Chat - NyayEase{% endblock %}
+
+{% block extra_head %}
+<style>
+    .chat-container { height: calc(100vh - 200px); }
+    .message-bubble { max-width: 80%; }
+    .user-message { 
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+        color: white;
+    }
+    .ai-message { 
+        background: #f8fafc; 
+        border: 1px solid #e2e8f0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-8">
+    <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+        <div class="bg-indigo-600 text-white p-6">
+            <h1 class="text-2xl font-bold">Legal AI Assistant</h1>
+            <p class="text-indigo-200">Ask me anything about Indian law, your rights, or legal procedures</p>
+        </div>
+        
+        <div id="chatMessages" class="chat-container overflow-y-auto p-6 space-y-4">
+            <div class="flex">
+                <div class="message-bubble ai-message p-4 rounded-lg">
+                    <p class="font-semibold text-indigo-600 mb-2">🤖 NyayEase Assistant</p>
+                    <p>Hello! I'm here to help you understand Indian law. You can:</p>
+                    <ul class="list-disc ml-5 mt-2 space-y-1">
+                        <li>Ask about constitutional articles (e.g., "What is Article 21?")</li>
+                        <li>Get help with legal scenarios (e.g., "My landlord is threatening eviction")</li>
+                        <li>Upload legal documents for explanation</li>
+                        <li>Ask in Hindi or Marathi too!</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="border-t p-6">
+            <div class="flex space-x-4">
+                <div class="flex-1">
+                    <textarea 
+                        id="messageInput" 
+                        placeholder="Type your legal question here..." 
+                        class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                        rows="2"
+                    ></textarea>
+                </div>
+                <div class="flex flex-col space-y-2">
+                    <button 
+                        id="sendButton" 
+                        class="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition font-semibold"
+                    >
+                        Send
+                    </button>
+                    <select id="languageSelect" class="text-sm border border-gray-300 rounded px-2 py-1">
+                        <option value="en">English</option>
+                        <option value="hi">हिंदी</option>
+                        <option value="mr">मराठी</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="mt-4 flex flex-wrap gap-2">
+                <button class="quick-action bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded text-sm" data-query="What is Article 21?">
+                    Article 21
+                </button>
+                <button class="quick-action bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded text-sm" data-query="Landlord eviction rights">
+                    Tenant Rights
+                </button>
+                <button class="quick-action bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded text-sm" data-query="Police arrest procedure">
+                    Arrest Rights
+                </button>
+                <button class="quick-action bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded text-sm" data-query="Women harassment law">
+                    Harassment Law
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const messageInput = document.getElementById('messageInput');
+    const sendButton = document.getElementById('sendButton');
+    const chatMessages = document.getElementById('chatMessages');
+    const languageSelect = document.getElementById('languageSelect');
+    const quickActions = document.querySelectorAll('.quick-action');
+
+    // Auth UI elements
+    const loginLogoutButton = document.getElementById('loginLogoutButton');
+    const registerButton = document.getElementById('registerButton');
+    const loggedInUserDisplay = document.getElementById('loggedInUserDisplay');
+
+    // Login Modal elements
+    const loginModal = document.getElementById('loginModal');
+    const loginForm = document.getElementById('loginForm');
+    const cancelLogin = document.getElementById('cancelLogin');
+    const usernameInput = document.getElementById('username');
+    const passwordInput = document.getElementById('password');
+    const loginError = document.getElementById('loginError');
+
+    // Register Modal elements
+    const registerModal = document.getElementById('registerModal');
+    const registerForm = document.getElementById('registerForm');
+    const cancelRegister = document.getElementById('cancelRegister');
+    const registerUsernameInput = document.getElementById('registerUsername');
+    const registerEmailInput = document.getElementById('registerEmail');
+    const registerPasswordInput = document.getElementById('registerPassword');
+    const registerPreferredLanguageSelect = document.getElementById('registerPreferredLanguage');
+    const registerError = document.getElementById('registerError');
+
+    // Function to update UI based on authentication status
+    function updateAuthUI() {
+        const isLoggedIn = document.body.dataset.loggedIn === 'true';
+        const username = document.body.dataset.username;
+
+        if (isLoggedIn) {
+            loggedInUserDisplay.textContent = `Logged in as ${username}`;
+            loggedInUserDisplay.classList.remove('hidden');
+            loginLogoutButton.textContent = 'Logout';
+            loginLogoutButton.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+            loginLogoutButton.classList.add('bg-red-600', 'hover:bg-red-700');
+            loginLogoutButton.onclick = handleLogout;
+            registerButton.classList.add('hidden'); // Hide register button when logged in
+        } else {
+            loggedInUserDisplay.classList.add('hidden');
+            loginLogoutButton.textContent = 'Login';
+            loginLogoutButton.classList.remove('bg-red-600', 'hover:bg-red-700');
+            loginLogoutButton.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+            loginLogoutButton.onclick = handleLogin;
+            registerButton.classList.remove('hidden'); // Show register button when logged out
+        }
+    }
+
+    function handleLogin() {
+        loginModal.classList.remove('hidden');
+        loginModal.classList.add('flex');
+        usernameInput.focus();
+    }
+
+    cancelLogin.addEventListener('click', () => {
+        loginModal.classList.add('hidden');
+        loginModal.classList.remove('flex');
+        loginError.classList.add('hidden');
+        loginForm.reset();
+    });
+
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        loginError.classList.add('hidden');
+
+        const username = usernameInput.value;
+        const password = passwordInput.value;
+
+        const formData = new URLSearchParams();
+        formData.append('username', username);
+        formData.append('password', password);
+
+        try {
+            const res = await fetch('/api/v1/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: formData.toString(),
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                localStorage.setItem('access_token', data.access_token);
+                // Update data attributes on body for Jinja2 to pick up on next page load
+                document.body.dataset.loggedIn = 'true';
+                document.body.dataset.username = username; 
+                loginModal.classList.add('hidden');
+                loginModal.classList.remove('flex');
+                loginForm.reset();
+                updateAuthUI(); // Update UI dynamically
+                addMessageToChat("You are now logged in. Your queries will be saved to your history.", 'ai');
+            } else {
+                const errorData = await res.json();
+                loginError.textContent = errorData.detail || 'Login failed. Please check your credentials.';
+                loginError.classList.remove('hidden');
+            }
+        } catch (err) {
+            loginError.textContent = 'Could not connect to the server. Please try again later.';
+            loginError.classList.remove('hidden');
+            console.error(err);
+        }
+    });
+
+    registerButton.addEventListener('click', () => {
+        registerModal.classList.remove('hidden');
+        registerModal.classList.add('flex');
+        registerUsernameInput.focus();
+    });
+
+    cancelRegister.addEventListener('click', () => {
+        registerModal.classList.add('hidden');
+        registerModal.classList.remove('flex');
+        registerError.classList.add('hidden');
+        registerForm.reset();
+    });
+
+    registerForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        registerError.classList.add('hidden');
+
+        const username = registerUsernameInput.value;
+        const email = registerEmailInput.value;
+        const password = registerPasswordInput.value;
+        const preferred_language = registerPreferredLanguageSelect.value;
+
+        try {
+            const res = await fetch('/api/v1/auth/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    username: username,
+                    email: email,
+                    password: password,
+                    preferred_language: preferred_language
+                }),
+            });
+
+            if (res.ok) {
+                registerModal.classList.add('hidden');
+                registerModal.classList.remove('flex');
+                registerForm.reset();
+                addMessageToChat("Registration successful! Please log in with your new account.", 'ai');
+                handleLogin(); // Optionally open login modal after successful registration
+            } else {
+                const errorData = await res.json();
+                registerError.textContent = errorData.detail || 'Registration failed. Please try again.';
+                registerError.classList.remove('hidden');
+            }
+        } catch (err) {
+            registerError.textContent = 'Could not connect to the server. Please try again later.';
+            registerError.classList.remove('hidden');
+            console.error(err);
+        }
+    });
+
+    function handleLogout() {
+        localStorage.removeItem('access_token');
+        document.body.dataset.loggedIn = 'false';
+        document.body.dataset.username = '';
+        updateAuthUI(); // Update UI dynamically
+        addMessageToChat("You have been logged out. Your queries will no longer be saved.", 'ai');
+    }
+    
+    // Quick action handlers
+    quickActions.forEach(button => {
+        button.addEventListener('click', () => {
+            messageInput.value = button.dataset.query;
+            sendMessage();
+        });
+    });
+    
+    async function sendMessage() {
+        const message = messageInput.value.trim();
+        const language = languageSelect.value;
+        
+        if (!message) return;
+        
+        // Add user message
+        addMessageToChat(message, 'user');
+        messageInput.value = '';
+        
+        // Show typing indicator
+        showTypingIndicator();
+        
+        try {
+            const token = localStorage.getItem("access_token");
+            
+            const res = await fetch("/api/v1/query/ask", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { "Authorization": "Bearer " + token } : {})
+                },
+                body: JSON.stringify({
+                    query: message,
+                    language: language,
+                    query_type: "general"
+                })
+            });
+            
+            const data = await res.json();
+            hideTypingIndicator();
+            
+            if (res.ok) {
+                addMessageToChat(data.response, 'ai');
+            } else if (res.status === 401) {
+                addMessageToChat("⚠️ Error: Not authenticated. Please log in to save your query history.", 'ai');
+            } else {
+                addMessageToChat("⚠️ Error: " + (data.detail || "Could not process query."), 'ai');
+            }
+        } catch (err) {
+            hideTypingIndicator();
+            addMessageToChat("⚠️ Error: Could not connect to server.", 'ai');
+            console.error(err);
+        }
+    }
+    
+    function addMessageToChat(message, sender) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'flex ' + (sender === 'user' ? 'justify-end' : '');
+        
+        const bubbleClass = sender === 'user' ? 'user-message' : 'ai-message';
+        const senderName = sender === 'user' ? '👤 You' : '🤖 NyayEase';
+        const messageContent = sender === 'ai' ? marked.parse(message) : `<p>${message}</p>`;
+
+        messageDiv.innerHTML = `
+            <div class="message-bubble ${bubbleClass} p-4 rounded-lg">
+                <p class="font-semibold mb-2 ${sender === 'user' ? 'text-white' : 'text-indigo-600'}">${senderName}</p>
+                <div class="prose">${messageContent}</div>
+            </div>
+        `;
+        
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    function showTypingIndicator() {
+        const typingDiv = document.createElement('div');
+        typingDiv.id = 'typingIndicator';
+        typingDiv.className = 'flex';
+        typingDiv.innerHTML = `
+            <div class="message-bubble ai-message p-4 rounded-lg">
+                <p class="font-semibold text-indigo-600 mb-2">🤖 NyayEase</p>
+                <p class="text-gray-500">Thinking...</p>
+            </div>
+        `;
+        chatMessages.appendChild(typingDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    function hideTypingIndicator() {
+        const indicator = document.getElementById('typingIndicator');
+        if (indicator) indicator.remove();
+    }
+    
+    // Event listeners
+    sendButton.addEventListener('click', sendMessage);
+    messageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    // Initial UI update
+    updateAuthUI();
+});
+</script>
+{% endblock %}

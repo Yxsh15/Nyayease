@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}NyayEase - Legal AI Assistant{% endblock %}</title>
+    
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .card-shadow { box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+    </style>
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-gray-50 min-h-screen" data-logged-in="{{ 'true' if current_user and current_user.is_authenticated else 'false' }}" data-username="{{ current_user.username if current_user and current_user.is_authenticated else '' }}">
+    <nav class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="/" class="text-2xl font-bold text-indigo-600">
+                        ⚖️ NyayEase
+                    </a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/chat" class="text-gray-600 hover:text-indigo-600">Chat</a>
+                    <a href="/scenarios" class="text-gray-600 hover:text-indigo-600">Scenarios</a>
+                    <a href="/documents" class="text-gray-600 hover:text-indigo-600">Documents</a>
+                    <span id="loggedInUserDisplay" class="text-gray-600 hidden"></span>
+                    <button id="registerButton" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300">
+                        Register
+                    </button>
+                    <button id="loginLogoutButton" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">
+                        Login
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="bg-gray-800 text-white py-8 mt-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center">
+                <p>&copy; 2025 NyayEase - Empowering Legal Literacy through GenAI</p>
+                <p class="text-gray-400 mt-2">Made with ❤️ by Dynamic Dinos</p>
+            </div>
+        </div>
+    </footer>
+
+    {% block extra_scripts %}{% endblock %}
+
+<!-- Login Modal -->
+<div id="loginModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800">Login to NyayEase</h2>
+        <form id="loginForm" class="space-y-4">
+            <div>
+                <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
+                <input type="text" id="username" name="username" required
+                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            </div>
+            <div>
+                <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                <input type="password" id="password" name="password" required
+                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            </div>
+            <div id="loginError" class="text-red-500 text-sm hidden"></div>
+            <div class="flex justify-end space-x-3">
+                <button type="button" id="cancelLogin"
+                        class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Cancel
+                </button>
+                <button type="submit"
+                        class="px-4 py-2 bg-indigo-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Login
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Register Modal -->
+<div id="registerModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800">Register for NyayEase</h2>
+        <form id="registerForm" class="space-y-4">
+            <div>
+                <label for="registerUsername" class="block text-sm font-medium text-gray-700">Username</label>
+                <input type="text" id="registerUsername" name="username" required
+                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            </div>
+            <div>
+                <label for="registerEmail" class="block text-sm font-medium text-gray-700">Email</label>
+                <input type="email" id="registerEmail" name="email" required
+                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            </div>
+            <div>
+                <label for="registerPassword" class="block text-sm font-medium text-gray-700">Password</label>
+                <input type="password" id="registerPassword" name="password" required
+                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            </div>
+            <div>
+                <label for="registerPreferredLanguage" class="block text-sm font-medium text-gray-700">Preferred Language</label>
+                <select id="registerPreferredLanguage" name="preferred_language"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    <option value="en">English</option>
+                    <option value="hi">Hindi</option>
+                    <option value="mr">Marathi</option>
+                </select>
+            </div>
+            <div id="registerError" class="text-red-500 text-sm hidden"></div>
+            <div class="flex justify-end space-x-3">
+                <button type="button" id="cancelRegister"
+                        class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Cancel
+                </button>
+                <button type="submit"
+                        class="px-4 py-2 bg-indigo-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Register
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Upload Modal -->
+<div id="uploadModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800">Upload Document</h2>
+        <form id="uploadForm" class="space-y-4" enctype="multipart/form-data">
+            <div>
+                <label for="documentFile" class="block text-sm font-medium text-gray-700">Select Document</label>
+                <input type="file" id="documentFile" name="file" required
+                       class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+            </div>
+            <div>
+                <label for="uploadLanguage" class="block text-sm font-medium text-gray-700">Language</label>
+                <select id="uploadLanguage" name="language"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    <option value="en">English</option>
+                    <option value="hi">Hindi</option>
+                    <option value="mr">Marathi</option>
+                </select>
+            </div>
+            <div id="uploadError" class="text-red-500 text-sm hidden"></div>
+            <div id="uploadSuccess" class="text-green-600 text-sm hidden"></div>
+            <div class="flex justify-end space-x-3">
+                <button type="button" id="cancelUpload"
+                        class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Cancel
+                </button>
+                <button type="submit"
+                        class="px-4 py-2 bg-indigo-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Upload
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Document Details Modal -->
+<div id="documentDetailsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
+    <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+        <h2 id="documentDetailsTitle" class="text-2xl font-bold mb-4 text-gray-800">Document Details</h2>
+        <div id="documentDetailsContent" class="prose max-w-none">
+            <!-- Document details will be loaded here -->
+        </div>
+        <div class="flex justify-end space-x-3 mt-6">
+            <button type="button" id="closeDocumentDetails"
+                    class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+    <input type="hidden" id="chatDocumentId" value="">
+</body>
+</body>
