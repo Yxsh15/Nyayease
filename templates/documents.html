@@ -11,11 +11,12 @@
         </button>
     </div>
 
-        <div id="documentsListContainer">
+    <div id="documentsListContainer">
         <div class="text-center py-16 border-2 border-dashed border-gray-300 rounded-xl">
             <p class="text-2xl text-gray-500">Loading documents...</p>
         </div>
     </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -23,12 +24,14 @@
 document.addEventListener('DOMContentLoaded', async function() {
     const documentsListContainer = document.getElementById('documentsListContainer');
 
-    async function fetchDocuments() {
+    // Make fetchDocuments globally available for upload functionality
+    window.fetchDocuments = async function() {
         documentsListContainer.innerHTML = `
             <div class="text-center py-16 border-2 border-dashed border-gray-300 rounded-xl">
                 <p class="text-2xl text-gray-500">Loading documents...</p>
             </div>
         `;
+        
         const token = localStorage.getItem('access_token');
 
         if (!token) {
@@ -61,13 +64,20 @@ document.addEventListener('DOMContentLoaded', async function() {
                         const uploadDate = new Date(doc.upload_date);
                         const formattedDate = uploadDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
                         documentsHtml += `
-                            <li class="p-6 hover:bg-gray-50 transition cursor-pointer" data-document-id="${doc.id}">
+                            <li class="p-6 hover:bg-gray-50 transition" data-document-id="${doc.id}">
                                 <div class="flex justify-between items-center">
-                                    <div>
+                                    <div class="cursor-pointer flex-1" onclick="openDocumentDetails('${doc.id}')">
                                         <p class="text-lg font-semibold text-indigo-700">${doc.filename}</p>
                                         <p class="text-sm text-gray-500">Uploaded on: ${formattedDate}</p>
                                     </div>
-                                    <span class="text-gray-400 hover:text-indigo-600">→</span>
+                                    <div class="flex items-center space-x-2">
+                                        <button onclick="openDocumentDetails('${doc.id}')" class="text-indigo-600 hover:text-indigo-800 px-3 py-1 rounded text-sm border border-indigo-600 hover:bg-indigo-50">
+                                            View
+                                        </button>
+                                        <button onclick="deleteDocument('${doc.id}', '${doc.filename}')" class="text-red-600 hover:text-red-800 px-3 py-1 rounded text-sm border border-red-600 hover:bg-red-50">
+                                            Delete
+                                        </button>
+                                    </div>
                                 </div>
                             </li>
                         `;
@@ -86,13 +96,14 @@ document.addEventListener('DOMContentLoaded', async function() {
                     `;
                 }
             } else if (res.status === 401) {
+                // Token invalid, refresh auth state
+                await window.authUtils.verifyToken();
                 documentsListContainer.innerHTML = `
                     <div class="text-center py-16 border-2 border-dashed border-gray-300 rounded-xl">
                         <p class="text-2xl text-gray-500">Your session has expired or you are not logged in.</p>
-                        <p class="text-400 mt-2">Please log in again to view your documents.</p>
+                        <p class="text-gray-400 mt-2">Please log in again to view your documents.</p>
                     </div>
                 `;
-                localStorage.removeItem('access_token'); // Clear invalid token
             } else {
                 const errorData = await res.json();
                 documentsListContainer.innerHTML = `
@@ -109,165 +120,261 @@ document.addEventListener('DOMContentLoaded', async function() {
             `;
             console.error('Error fetching documents:', err);
         }
-    }
+    };
 
-    fetchDocuments();
+    // Initial load
+    await fetchDocuments();
 
-    // Upload Modal functionality
+    // Upload Document Button
     const uploadDocumentButton = document.getElementById('uploadDocumentButton');
-    const uploadModal = document.getElementById('uploadModal');
-    const cancelUpload = document.getElementById('cancelUpload');
-    const uploadForm = document.getElementById('uploadForm');
-    const documentFile = document.getElementById('documentFile');
-    const uploadLanguage = document.getElementById('uploadLanguage');
-    const uploadError = document.getElementById('uploadError');
-    const uploadSuccess = document.getElementById('uploadSuccess');
-
-    uploadDocumentButton.addEventListener('click', () => {
-        uploadModal.classList.remove('hidden');
-        uploadModal.classList.add('flex');
-        uploadError.classList.add('hidden');
-        uploadSuccess.classList.add('hidden');
-        uploadForm.reset();
-    });
-
-    cancelUpload.addEventListener('click', () => {
-        uploadModal.classList.add('hidden');
-        uploadModal.classList.remove('flex');
-        uploadError.classList.add('hidden');
-        uploadSuccess.classList.add('hidden');
-        uploadForm.reset();
-    });
-
-    uploadForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        uploadError.classList.add('hidden');
-        uploadSuccess.classList.add('hidden');
-
-        const token = localStorage.getItem('access_token');
-        if (!token) {
-            uploadError.textContent = 'You must be logged in to upload documents.';
-            uploadError.classList.remove('hidden');
-            return;
-        }
-
-        const file = documentFile.files[0];
-        const language = uploadLanguage.value;
-
-        if (!file) {
-            uploadError.textContent = 'Please select a file to upload.';
-            uploadError.classList.remove('hidden');
-            return;
-        }
-
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('language', language);
-
-        try {
-            const res = await fetch('/api/v1/documents/upload', {
-                method: 'POST',
-                headers: {
-                    'Authorization': 'Bearer ' + token,
-                },
-                body: formData,
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                uploadSuccess.textContent = `Document "${data.filename}" uploaded and analyzed successfully!`;
-                uploadSuccess.classList.remove('hidden');
-                uploadForm.reset();
-                // Optionally, refresh the documents list after successful upload
-                fetchDocuments();
-            } else {
-                const errorData = await res.json();
-                uploadError.textContent = errorData.detail || 'Failed to upload document.';
-                uploadError.classList.remove('hidden');
+    if (uploadDocumentButton) {
+        uploadDocumentButton.addEventListener('click', () => {
+            const token = localStorage.getItem('access_token');
+            if (!token) {
+                alert('Please log in first to upload documents.');
+                return;
             }
-        } catch (err) {
-            uploadError.textContent = 'Could not connect to the server to upload document.';
-            uploadError.classList.remove('hidden');
-            console.error('Error uploading document:', err);
-        }
-    });
+            
+            const uploadModal = document.getElementById('uploadModal');
+            if (uploadModal) {
+                uploadModal.classList.remove('hidden');
+                uploadModal.classList.add('flex');
+                const uploadError = document.getElementById('uploadError');
+                const uploadSuccess = document.getElementById('uploadSuccess');
+                if (uploadError) uploadError.classList.add('hidden');
+                if (uploadSuccess) uploadSuccess.classList.add('hidden');
+                const uploadForm = document.getElementById('uploadForm');
+                if (uploadForm) uploadForm.reset();
+            }
+        });
+    }
 
     // Document Details Modal functionality
     const documentDetailsModal = document.getElementById('documentDetailsModal');
-    const closeDocumentDetails = document.getElementById('closeDocumentDetails');
     const documentDetailsTitle = document.getElementById('documentDetailsTitle');
     const documentDetailsContent = document.getElementById('documentDetailsContent');
 
-    closeDocumentDetails.addEventListener('click', () => {
-        documentDetailsModal.classList.add('hidden');
-        documentDetailsModal.classList.remove('flex');
-    });
+    // Make openDocumentDetails globally available
+    window.openDocumentDetails = async function(documentId) {
+        const token = localStorage.getItem('access_token');
 
-        documentsListContainer.addEventListener('click', async (e) => {
-        const listItem = e.target.closest('li[data-document-id]');
-        if (listItem) {
-            const documentId = listItem.dataset.documentId;
-            const token = localStorage.getItem('access_token');
+        if (!token) {
+            alert('Please log in to view document details.');
+            return;
+        }
 
-            if (!token) {
-                alert('Please log in to view document details.');
-                return;
-            }
-
-            documentDetailsTitle.textContent = 'Loading Document...';
-            documentDetailsContent.innerHTML = '<p>Fetching details...</p>';
+        if (documentDetailsTitle) documentDetailsTitle.textContent = 'Loading Document...';
+        if (documentDetailsContent) documentDetailsContent.innerHTML = '<p>Fetching details...</p>';
+        if (documentDetailsModal) {
             documentDetailsModal.classList.remove('hidden');
             documentDetailsModal.classList.add('flex');
+        }
 
-            try {
-                const res = await fetch(`/api/v1/documents/${documentId}`, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': 'Bearer ' + token,
-                        'Content-Type': 'application/json'
-                    }
-                });
+        try {
+            const res = await fetch(`/api/v1/documents/${documentId}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                }
+            });
 
-                if (res.ok) {
-                    const doc = await res.json();
-                    documentDetailsTitle.textContent = doc.filename;
+            if (res.ok) {
+                const doc = await res.json();
+                if (documentDetailsTitle) documentDetailsTitle.textContent = doc.filename;
+                if (documentDetailsContent) {
                     documentDetailsContent.innerHTML = `
                         <h3 class="text-xl font-semibold mb-2">Extracted Text:</h3>
                         <p class="mb-4">${doc.extracted_text}</p>
                         <h3 class="text-xl font-semibold mb-2">Analysis Result:</h3>
                         <p>${doc.analysis_result}</p>
+                        <div class="mt-6">
+                            <button id="chatAboutDocumentButton" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">
+                                Chat About This Document
+                            </button>
+                        </div>
                     `;
-                    // Store document ID for chat
-                    documentDetailsModal.dataset.currentDocumentId = doc.id;
-                } else if (res.status === 401) {
+                    
+                    // Setup chat button
+                    const chatButton = document.getElementById('chatAboutDocumentButton');
+                    if (chatButton) {
+                        chatButton.addEventListener('click', () => {
+                            const chatDocumentIdInput = document.getElementById('chatDocumentId');
+                            if (chatDocumentIdInput) {
+                                chatDocumentIdInput.value = doc.id;
+                            }
+                            window.location.href = `/chat?document_id=${doc.id}`;
+                        });
+                    }
+                }
+                // Store document ID for chat
+                if (documentDetailsModal) documentDetailsModal.dataset.currentDocumentId = doc.id;
+            } else if (res.status === 401) {
+                await window.authUtils.verifyToken();
+                if (documentDetailsContent) {
                     documentDetailsContent.innerHTML = '<p class="text-red-500">Your session has expired or you are not authorized. Please log in again.</p>';
-                    localStorage.removeItem('access_token');
-                } else {
-                    const errorData = await res.json();
+                }
+            } else {
+                const errorData = await res.json();
+                if (documentDetailsContent) {
                     documentDetailsContent.innerHTML = `<p class="text-red-500">Error: ${errorData.detail || 'Could not fetch document details.'}</p>`;
                 }
-            } catch (err) {
+            }
+        } catch (err) {
+            if (documentDetailsContent) {
                 documentDetailsContent.innerHTML = '<p class="text-red-500">Could not connect to the server to fetch document details.</p>';
-                console.error('Error fetching document details:', err);
+            }
+            console.error('Error fetching document details:', err);
+        }
+    };
+
+    // Make deleteDocument globally available
+    window.deleteDocument = function(documentId, filename) {
+        const deleteModal = document.getElementById('deleteConfirmationModal');
+        const deleteMessage = document.getElementById('deleteConfirmationMessage');
+        const confirmDeleteBtn = document.getElementById('confirmDelete');
+        const cancelDeleteBtn = document.getElementById('cancelDelete');
+
+        if (deleteModal && deleteMessage && confirmDeleteBtn && cancelDeleteBtn) {
+            // Update the message
+            deleteMessage.textContent = `Are you sure you want to delete "${filename}"? This action cannot be undone.`;
+            
+            // Show the modal
+            deleteModal.classList.remove('hidden');
+            deleteModal.classList.add('flex');
+
+            // Handle confirm button
+            const handleConfirm = async () => {
+                deleteModal.classList.add('hidden');
+                deleteModal.classList.remove('flex');
+                await performDeleteDocument(documentId, filename);
+                confirmDeleteBtn.removeEventListener('click', handleConfirm);
+                cancelDeleteBtn.removeEventListener('click', handleCancel);
+            };
+
+            // Handle cancel button
+            const handleCancel = () => {
+                deleteModal.classList.add('hidden');
+                deleteModal.classList.remove('flex');
+                confirmDeleteBtn.removeEventListener('click', handleConfirm);
+                cancelDeleteBtn.removeEventListener('click', handleCancel);
+            };
+
+            confirmDeleteBtn.addEventListener('click', handleConfirm);
+            cancelDeleteBtn.addEventListener('click', handleCancel);
+        } else {
+            // Fallback to browser confirm if modal elements not found
+            const confirmDelete = confirm(`Are you sure you want to delete "${filename}"? This action cannot be undone.`);
+            if (confirmDelete) {
+                performDeleteDocument(documentId, filename);
             }
         }
-    });
+    };
 
-    // Chat about document functionality
-    const chatAboutDocumentButton = document.getElementById('chatAboutDocumentButton');
-    const chatDocumentIdInput = document.getElementById('chatDocumentId');
+    async function performDeleteDocument(documentId, filename) {
+        const token = localStorage.getItem('access_token');
 
-    chatAboutDocumentButton.addEventListener('click', () => {
-        const currentDocumentId = documentDetailsModal.dataset.currentDocumentId;
-        if (currentDocumentId) {
-            chatDocumentIdInput.value = currentDocumentId;
-            window.location.href = '/chat'; // Navigate to chat page
-        } else {
-            alert('No document selected to chat about.');
+        if (!token) {
+            alert('Please log in to delete documents.');
+            return;
         }
+
+        // Show loading state
+        const documentElement = document.querySelector(`li[data-document-id="${documentId}"]`);
+        if (documentElement) {
+            documentElement.style.opacity = '0.5';
+            documentElement.style.pointerEvents = 'none';
+        }
+
+        try {
+            const res = await fetch(`/api/v1/documents/${documentId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (res.ok) {
+                // Show success message
+                showNotification(`Document "${filename}" has been deleted successfully.`, 'success');
+                // Refresh the documents list
+                await fetchDocuments();
+            } else if (res.status === 401) {
+                await window.authUtils.verifyToken();
+                showNotification('Your session has expired. Please log in again.', 'error');
+            } else if (res.status === 404) {
+                showNotification('Document not found. It may have already been deleted.', 'warning');
+                // Refresh the list anyway
+                await fetchDocuments();
+            } else {
+                const errorData = await res.json();
+                showNotification(`Error deleting document: ${errorData.detail || 'Unknown error'}`, 'error');
+            }
+        } catch (err) {
+            showNotification('Could not connect to the server to delete the document.', 'error');
+            console.error('Error deleting document:', err);
+        } finally {
+            // Restore element state if it still exists
+            if (documentElement) {
+                documentElement.style.opacity = '1';
+                documentElement.style.pointerEvents = 'auto';
+            }
+        }
+    }
+
+    // Simple notification system
+    function showNotification(message, type = 'info') {
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transition-all duration-300 transform translate-x-full`;
+        
+        // Set colors based on type
+        switch (type) {
+            case 'success':
+                notification.className += ' bg-green-500 text-white';
+                break;
+            case 'error':
+                notification.className += ' bg-red-500 text-white';
+                break;
+            case 'warning':
+                notification.className += ' bg-yellow-500 text-black';
+                break;
+            default:
+                notification.className += ' bg-blue-500 text-white';
+        }
+        
+        notification.innerHTML = `
+            <div class="flex items-center justify-between">
+                <span>${message}</span>
+                <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-xl leading-none">&times;</button>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Animate in
+        setTimeout(() => {
+            notification.classList.remove('translate-x-full');
+        }, 100);
+        
+        // Auto remove after 5 seconds
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.classList.add('translate-x-full');
+                setTimeout(() => {
+                    if (notification.parentElement) {
+                        notification.remove();
+                    }
+                }, 300);
+            }
+        }, 5000);
+    }
+
+    documentsListContainer.addEventListener('click', async (e) => {
+        // Remove the old click handler since we're now using onclick attributes
+        // This prevents conflicts with the new button-based approach
     });
-});
 });
 </script>
-</div>
 {% endblock %}

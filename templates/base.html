@@ -180,6 +180,422 @@
         </div>
     </div>
 </div>
-    <input type="hidden" id="chatDocumentId" value="">
+
+<!-- Delete Confirmation Modal -->
+<div id="deleteConfirmationModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+        <h2 class="text-2xl font-bold mb-4 text-gray-800">Confirm Deletion</h2>
+        <p id="deleteConfirmationMessage" class="text-gray-600 mb-6">Are you sure you want to delete this document? This action cannot be undone.</p>
+        <div class="flex justify-end space-x-3">
+            <button type="button" id="cancelDelete"
+                    class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                Cancel
+            </button>
+            <button type="button" id="confirmDelete"
+                    class="px-4 py-2 bg-red-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                Delete
+            </button>
+        </div>
+    </div>
+</div>
+
+<input type="hidden" id="chatDocumentId" value="">
+
+<script>
+// Global authentication utilities - Load on every page
+window.authUtils = {
+    // Check if user is logged in based on token and server state
+    isLoggedIn: function() {
+        const hasToken = !!localStorage.getItem('access_token');
+        const serverState = document.body.dataset.loggedIn === 'true';
+        return hasToken || serverState;
+    },
+    
+    // Get current username from server or localStorage
+    getUsername: function() {
+        return document.body.dataset.username || localStorage.getItem('username') || '';
+    },
+    
+    // Set login state
+    setLoginState: function(username, token) {
+        localStorage.setItem('access_token', token);
+        localStorage.setItem('username', username);
+        document.body.dataset.loggedIn = 'true';
+        document.body.dataset.username = username;
+        this.updateAuthUI();
+    },
+    
+    // Clear login state
+    clearLoginState: function() {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('username');
+        document.body.dataset.loggedIn = 'false';
+        document.body.dataset.username = '';
+        this.updateAuthUI();
+    },
+    
+    // Update UI based on authentication status
+    updateAuthUI: function() {
+        const loginLogoutButton = document.getElementById('loginLogoutButton');
+        const registerButton = document.getElementById('registerButton');
+        const loggedInUserDisplay = document.getElementById('loggedInUserDisplay');
+        
+        if (!loginLogoutButton || !registerButton || !loggedInUserDisplay) {
+            return; // Elements not found on this page
+        }
+
+        const isLoggedIn = this.isLoggedIn();
+        const username = this.getUsername();
+
+        if (isLoggedIn && username) {
+            loggedInUserDisplay.textContent = `Logged in as ${username}`;
+            loggedInUserDisplay.classList.remove('hidden');
+            loginLogoutButton.textContent = 'Logout';
+            loginLogoutButton.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+            loginLogoutButton.classList.add('bg-red-600', 'hover:bg-red-700');
+            registerButton.classList.add('hidden');
+        } else {
+            loggedInUserDisplay.classList.add('hidden');
+            loginLogoutButton.textContent = 'Login';
+            loginLogoutButton.classList.remove('bg-red-600', 'hover:bg-red-700');
+            loginLogoutButton.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+            registerButton.classList.remove('hidden');
+        }
+    },
+    
+    // Verify token with server
+    verifyToken: async function() {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            this.clearLoginState();
+            return false;
+        }
+        
+        try {
+            const response = await fetch('/api/v1/auth/profile', {
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                const userData = await response.json();
+                this.setLoginState(userData.username, token);
+                return true;
+            } else {
+                this.clearLoginState();
+                return false;
+            }
+        } catch (error) {
+            console.error('Token verification failed:', error);
+            this.clearLoginState();
+            return false;
+        }
+    }
+};
+
+// Initialize authentication on page load
+document.addEventListener('DOMContentLoaded', async function() {
+    // Verify token on page load
+    await window.authUtils.verifyToken();
+    
+    // Update UI
+    window.authUtils.updateAuthUI();
+    
+    // Setup event listeners for login/logout/register
+    setupAuthEventListeners();
+});
+
+function setupAuthEventListeners() {
+    const loginLogoutButton = document.getElementById('loginLogoutButton');
+    const registerButton = document.getElementById('registerButton');
+    
+    if (loginLogoutButton) {
+        loginLogoutButton.addEventListener('click', function() {
+            if (window.authUtils.isLoggedIn()) {
+                handleLogout();
+            } else {
+                handleLogin();
+            }
+        });
+    }
+    
+    if (registerButton) {
+        registerButton.addEventListener('click', handleRegisterClick);
+    }
+    
+    setupModalEventListeners();
+}
+
+function handleLogin() {
+    const loginModal = document.getElementById('loginModal');
+    const usernameInput = document.getElementById('username');
+    
+    if (loginModal) {
+        loginModal.classList.remove('hidden');
+        loginModal.classList.add('flex');
+        if (usernameInput) usernameInput.focus();
+    }
+}
+
+function handleLogout() {
+    window.authUtils.clearLoginState();
+    
+    // Show logout message if there's a way to display it
+    const messageContainer = document.getElementById('chatMessages');
+    if (messageContainer && typeof addMessageToChat === 'function') {
+        addMessageToChat("You have been logged out. Your queries will no longer be saved.", 'ai');
+    }
+}
+
+function handleRegisterClick() {
+    const registerModal = document.getElementById('registerModal');
+    const registerUsernameInput = document.getElementById('registerUsername');
+    
+    if (registerModal) {
+        registerModal.classList.remove('hidden');
+        registerModal.classList.add('flex');
+        if (registerUsernameInput) registerUsernameInput.focus();
+    }
+}
+
+function setupModalEventListeners() {
+    // Login Modal
+    const loginModal = document.getElementById('loginModal');
+    const loginForm = document.getElementById('loginForm');
+    const cancelLogin = document.getElementById('cancelLogin');
+    const loginError = document.getElementById('loginError');
+
+    if (cancelLogin) {
+        cancelLogin.addEventListener('click', () => {
+            loginModal.classList.add('hidden');
+            loginModal.classList.remove('flex');
+            if (loginError) loginError.classList.add('hidden');
+            if (loginForm) loginForm.reset();
+        });
+    }
+
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (loginError) loginError.classList.add('hidden');
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            const formData = new URLSearchParams();
+            formData.append('username', username);
+            formData.append('password', password);
+
+            try {
+                const res = await fetch('/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: formData.toString(),
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    window.authUtils.setLoginState(username, data.access_token);
+                    
+                    loginModal.classList.add('hidden');
+                    loginModal.classList.remove('flex');
+                    loginForm.reset();
+                    
+                    // Show success message if on chat page
+                    const messageContainer = document.getElementById('chatMessages');
+                    if (messageContainer && typeof addMessageToChat === 'function') {
+                        addMessageToChat("You are now logged in. Your queries will be saved to your history.", 'ai');
+                    }
+                } else {
+                    const errorData = await res.json();
+                    if (loginError) {
+                        loginError.textContent = errorData.detail || 'Login failed. Please check your credentials.';
+                        loginError.classList.remove('hidden');
+                    }
+                }
+            } catch (err) {
+                if (loginError) {
+                    loginError.textContent = 'Could not connect to the server. Please try again later.';
+                    loginError.classList.remove('hidden');
+                }
+                console.error(err);
+            }
+        });
+    }
+
+    // Register Modal
+    const registerModal = document.getElementById('registerModal');
+    const registerForm = document.getElementById('registerForm');
+    const cancelRegister = document.getElementById('cancelRegister');
+    const registerError = document.getElementById('registerError');
+
+    if (cancelRegister) {
+        cancelRegister.addEventListener('click', () => {
+            registerModal.classList.add('hidden');
+            registerModal.classList.remove('flex');
+            if (registerError) registerError.classList.add('hidden');
+            if (registerForm) registerForm.reset();
+        });
+    }
+
+    if (registerForm) {
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (registerError) registerError.classList.add('hidden');
+
+            const username = document.getElementById('registerUsername').value;
+            const email = document.getElementById('registerEmail').value;
+            const password = document.getElementById('registerPassword').value;
+            const preferred_language = document.getElementById('registerPreferredLanguage').value;
+
+            try {
+                const res = await fetch('/api/v1/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        email: email,
+                        password: password,
+                        preferred_language: preferred_language
+                    }),
+                });
+
+                if (res.ok) {
+                    registerModal.classList.add('hidden');
+                    registerModal.classList.remove('flex');
+                    registerForm.reset();
+                    
+                    // Show success message and open login modal
+                    alert('Registration successful! Please log in with your new account.');
+                    handleLogin();
+                } else {
+                    const errorData = await res.json();
+                    if (registerError) {
+                        registerError.textContent = errorData.detail || 'Registration failed. Please try again.';
+                        registerError.classList.remove('hidden');
+                    }
+                }
+            } catch (err) {
+                if (registerError) {
+                    registerError.textContent = 'Could not connect to the server. Please try again later.';
+                    registerError.classList.remove('hidden');
+                }
+                console.error(err);
+            }
+        });
+    }
+
+    // Upload Modal (if exists)
+    setupUploadModal();
+    
+    // Document Details Modal (if exists)
+    setupDocumentDetailsModal();
+}
+
+function setupUploadModal() {
+    const uploadModal = document.getElementById('uploadModal');
+    const uploadForm = document.getElementById('uploadForm');
+    const cancelUpload = document.getElementById('cancelUpload');
+    const uploadError = document.getElementById('uploadError');
+    const uploadSuccess = document.getElementById('uploadSuccess');
+
+    if (cancelUpload) {
+        cancelUpload.addEventListener('click', () => {
+            uploadModal.classList.add('hidden');
+            uploadModal.classList.remove('flex');
+            if (uploadError) uploadError.classList.add('hidden');
+            if (uploadSuccess) uploadSuccess.classList.add('hidden');
+            if (uploadForm) uploadForm.reset();
+        });
+    }
+
+    if (uploadForm) {
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (uploadError) uploadError.classList.add('hidden');
+            if (uploadSuccess) uploadSuccess.classList.add('hidden');
+
+            const token = localStorage.getItem('access_token');
+            if (!token) {
+                if (uploadError) {
+                    uploadError.textContent = 'You must be logged in to upload documents.';
+                    uploadError.classList.remove('hidden');
+                }
+                return;
+            }
+
+            const file = document.getElementById('documentFile').files[0];
+            const language = document.getElementById('uploadLanguage').value;
+
+            if (!file) {
+                if (uploadError) {
+                    uploadError.textContent = 'Please select a file to upload.';
+                    uploadError.classList.remove('hidden');
+                }
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('language', language);
+
+            try {
+                const res = await fetch('/api/v1/documents/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + token,
+                    },
+                    body: formData,
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    if (uploadSuccess) {
+                        uploadSuccess.textContent = `Document "${data.filename}" uploaded and analyzed successfully!`;
+                        uploadSuccess.classList.remove('hidden');
+                    }
+                    uploadForm.reset();
+                    
+                    // Refresh documents list if function exists
+                    if (typeof fetchDocuments === 'function') {
+                        fetchDocuments();
+                    }
+                } else {
+                    const errorData = await res.json();
+                    if (uploadError) {
+                        uploadError.textContent = errorData.detail || 'Failed to upload document.';
+                        uploadError.classList.remove('hidden');
+                    }
+                }
+            } catch (err) {
+                if (uploadError) {
+                    uploadError.textContent = 'Could not connect to the server to upload document.';
+                    uploadError.classList.remove('hidden');
+                }
+                console.error('Error uploading document:', err);
+            }
+        });
+    }
+}
+
+function setupDocumentDetailsModal() {
+    const documentDetailsModal = document.getElementById('documentDetailsModal');
+    const closeDocumentDetails = document.getElementById('closeDocumentDetails');
+
+    if (closeDocumentDetails) {
+        closeDocumentDetails.addEventListener('click', () => {
+            documentDetailsModal.classList.add('hidden');
+            documentDetailsModal.classList.remove('flex');
+        });
+    }
+}
+</script>
 </body>
-</body>
+</html>

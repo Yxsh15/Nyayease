@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from app.database.connection import get_db
 from app.models.query import LegalQueryRequest, LegalQueryResponse, ConstitutionQueryRequest, ScenarioRequest
 from app.services.ai_service import AIService
-from app.database.models import Query, User
+from app.database.models import Query, User, Document  # Added Document import
 from app.routes.auth import get_optional_current_user, get_current_user
 from typing import List, Optional
 import logging
@@ -141,4 +141,3 @@ async def get_query_history(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error fetching query history."
         )
-    

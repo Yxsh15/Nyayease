@@ -14,6 +14,16 @@
         background: #f8fafc; 
         border: 1px solid #e2e8f0;
     }
+    .document-context-banner {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        padding: 12px 24px;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
 </style>
 {% endblock %}
 
@@ -23,6 +33,17 @@
         <div class="bg-indigo-600 text-white p-6">
             <h1 class="text-2xl font-bold">Legal AI Assistant</h1>
             <p class="text-indigo-200">Ask me anything about Indian law, your rights, or legal procedures</p>
+        </div>
+        
+        <!-- Document Context Banner (hidden by default) -->
+        <div id="documentContextBanner" class="document-context-banner hidden">
+            <div>
+                <span class="font-semibold">📄 Document Context Active:</span>
+                <span id="documentContextName">Loading...</span>
+            </div>
+            <button id="clearDocumentContext" class="text-white hover:text-gray-200 text-sm underline">
+                Clear Context
+            </button>
         </div>
         
         <div id="chatMessages" class="chat-container overflow-y-auto p-6 space-y-4">
@@ -78,6 +99,16 @@
                 <button class="quick-action bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded text-sm" data-query="Women harassment law">
                     Harassment Law
                 </button>
+                <!-- Document-specific quick actions (hidden by default) -->
+                <button id="documentSummaryAction" class="quick-action bg-green-100 hover:bg-green-200 px-3 py-1 rounded text-sm hidden" data-query="What is this document about?">
+                    Document Summary
+                </button>
+                <button id="documentActionAction" class="quick-action bg-green-100 hover:bg-green-200 px-3 py-1 rounded text-sm hidden" data-query="What action do I need to take based on this document?">
+                    Required Actions
+                </button>
+                <button id="documentDeadlineAction" class="quick-action bg-green-100 hover:bg-green-200 px-3 py-1 rounded text-sm hidden" data-query="Are there any important dates or deadlines in this document?">
+                    Important Dates
+                </button>
             </div>
         </div>
     </div>
@@ -93,169 +124,89 @@ document.addEventListener('DOMContentLoaded', function() {
     const chatMessages = document.getElementById('chatMessages');
     const languageSelect = document.getElementById('languageSelect');
     const quickActions = document.querySelectorAll('.quick-action');
-
-    // Auth UI elements
-    const loginLogoutButton = document.getElementById('loginLogoutButton');
-    const registerButton = document.getElementById('registerButton');
-    const loggedInUserDisplay = document.getElementById('loggedInUserDisplay');
-
-    // Login Modal elements
-    const loginModal = document.getElementById('loginModal');
-    const loginForm = document.getElementById('loginForm');
-    const cancelLogin = document.getElementById('cancelLogin');
-    const usernameInput = document.getElementById('username');
-    const passwordInput = document.getElementById('password');
-    const loginError = document.getElementById('loginError');
-
-    // Register Modal elements
-    const registerModal = document.getElementById('registerModal');
-    const registerForm = document.getElementById('registerForm');
-    const cancelRegister = document.getElementById('cancelRegister');
-    const registerUsernameInput = document.getElementById('registerUsername');
-    const registerEmailInput = document.getElementById('registerEmail');
-    const registerPasswordInput = document.getElementById('registerPassword');
-    const registerPreferredLanguageSelect = document.getElementById('registerPreferredLanguage');
-    const registerError = document.getElementById('registerError');
-
-    // Function to update UI based on authentication status
-    function updateAuthUI() {
-        const isLoggedIn = document.body.dataset.loggedIn === 'true';
-        const username = document.body.dataset.username;
-
-        if (isLoggedIn) {
-            loggedInUserDisplay.textContent = `Logged in as ${username}`;
-            loggedInUserDisplay.classList.remove('hidden');
-            loginLogoutButton.textContent = 'Logout';
-            loginLogoutButton.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
-            loginLogoutButton.classList.add('bg-red-600', 'hover:bg-red-700');
-            loginLogoutButton.onclick = handleLogout;
-            registerButton.classList.add('hidden'); // Hide register button when logged in
-        } else {
-            loggedInUserDisplay.classList.add('hidden');
-            loginLogoutButton.textContent = 'Login';
-            loginLogoutButton.classList.remove('bg-red-600', 'hover:bg-red-700');
-            loginLogoutButton.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
-            loginLogoutButton.onclick = handleLogin;
-            registerButton.classList.remove('hidden'); // Show register button when logged out
+    const documentContextBanner = document.getElementById('documentContextBanner');
+    const documentContextName = document.getElementById('documentContextName');
+    const clearDocumentContext = document.getElementById('clearDocumentContext');
+    
+    // Document-specific elements
+    const documentSummaryAction = document.getElementById('documentSummaryAction');
+    const documentActionAction = document.getElementById('documentActionAction');
+    const documentDeadlineAction = document.getElementById('documentDeadlineAction');
+    
+    let currentDocumentId = null;
+    let currentDocumentName = null;
+    
+    // Extract document_id from URL parameters
+    function getDocumentIdFromURL() {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('document_id');
+    }
+    
+    // Load document context if document_id is in URL
+    async function loadDocumentContext() {
+        const documentId = getDocumentIdFromURL();
+        if (!documentId) return;
+        
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            console.warn('No token found, cannot load document context');
+            return;
         }
-    }
-
-    function handleLogin() {
-        loginModal.classList.remove('hidden');
-        loginModal.classList.add('flex');
-        usernameInput.focus();
-    }
-
-    cancelLogin.addEventListener('click', () => {
-        loginModal.classList.add('hidden');
-        loginModal.classList.remove('flex');
-        loginError.classList.add('hidden');
-        loginForm.reset();
-    });
-
-    loginForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        loginError.classList.add('hidden');
-
-        const username = usernameInput.value;
-        const password = passwordInput.value;
-
-        const formData = new URLSearchParams();
-        formData.append('username', username);
-        formData.append('password', password);
-
+        
         try {
-            const res = await fetch('/api/v1/auth/login', {
-                method: 'POST',
+            const res = await fetch(`/api/v1/documents/${documentId}`, {
+                method: 'GET',
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: formData.toString(),
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                }
             });
-
+            
             if (res.ok) {
-                const data = await res.json();
-                localStorage.setItem('access_token', data.access_token);
-                // Update data attributes on body for Jinja2 to pick up on next page load
-                document.body.dataset.loggedIn = 'true';
-                document.body.dataset.username = username; 
-                loginModal.classList.add('hidden');
-                loginModal.classList.remove('flex');
-                loginForm.reset();
-                updateAuthUI(); // Update UI dynamically
-                addMessageToChat("You are now logged in. Your queries will be saved to your history.", 'ai');
+                const document = await res.json();
+                currentDocumentId = documentId;
+                currentDocumentName = document.filename;
+                
+                // Show document context banner
+                documentContextName.textContent = document.filename;
+                documentContextBanner.classList.remove('hidden');
+                
+                // Show document-specific quick actions
+                documentSummaryAction.classList.remove('hidden');
+                documentActionAction.classList.remove('hidden');
+                documentDeadlineAction.classList.remove('hidden');
+                
+                // Add initial message about document context
+                addMessageToChat(`📄 Document context loaded: "${document.filename}". You can now ask questions about this specific document!`, 'ai');
+                
+            } else if (res.status === 401) {
+                await window.authUtils.verifyToken();
+                console.warn('Authentication failed while loading document context');
             } else {
-                const errorData = await res.json();
-                loginError.textContent = errorData.detail || 'Login failed. Please check your credentials.';
-                loginError.classList.remove('hidden');
+                console.error('Failed to load document context:', res.status);
             }
         } catch (err) {
-            loginError.textContent = 'Could not connect to the server. Please try again later.';
-            loginError.classList.remove('hidden');
-            console.error(err);
+            console.error('Error loading document context:', err);
         }
-    });
-
-    registerButton.addEventListener('click', () => {
-        registerModal.classList.remove('hidden');
-        registerModal.classList.add('flex');
-        registerUsernameInput.focus();
-    });
-
-    cancelRegister.addEventListener('click', () => {
-        registerModal.classList.add('hidden');
-        registerModal.classList.remove('flex');
-        registerError.classList.add('hidden');
-        registerForm.reset();
-    });
-
-    registerForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        registerError.classList.add('hidden');
-
-        const username = registerUsernameInput.value;
-        const email = registerEmailInput.value;
-        const password = registerPasswordInput.value;
-        const preferred_language = registerPreferredLanguageSelect.value;
-
-        try {
-            const res = await fetch('/api/v1/auth/register', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    username: username,
-                    email: email,
-                    password: password,
-                    preferred_language: preferred_language
-                }),
-            });
-
-            if (res.ok) {
-                registerModal.classList.add('hidden');
-                registerModal.classList.remove('flex');
-                registerForm.reset();
-                addMessageToChat("Registration successful! Please log in with your new account.", 'ai');
-                handleLogin(); // Optionally open login modal after successful registration
-            } else {
-                const errorData = await res.json();
-                registerError.textContent = errorData.detail || 'Registration failed. Please try again.';
-                registerError.classList.remove('hidden');
-            }
-        } catch (err) {
-            registerError.textContent = 'Could not connect to the server. Please try again later.';
-            registerError.classList.remove('hidden');
-            console.error(err);
-        }
-    });
-
-    function handleLogout() {
-        localStorage.removeItem('access_token');
-        document.body.dataset.loggedIn = 'false';
-        document.body.dataset.username = '';
-        updateAuthUI(); // Update UI dynamically
-        addMessageToChat("You have been logged out. Your queries will no longer be saved.", 'ai');
+    }
+    
+    // Clear document context
+    function clearDocumentContextHandler() {
+        currentDocumentId = null;
+        currentDocumentName = null;
+        documentContextBanner.classList.add('hidden');
+        
+        // Hide document-specific quick actions
+        documentSummaryAction.classList.add('hidden');
+        documentActionAction.classList.add('hidden');
+        documentDeadlineAction.classList.add('hidden');
+        
+        // Update URL to remove document_id parameter
+        const url = new URL(window.location);
+        url.searchParams.delete('document_id');
+        window.history.replaceState({}, '', url);
+        
+        addMessageToChat("Document context cleared. You can now ask general legal questions.", 'ai');
     }
     
     // Quick action handlers
@@ -265,6 +216,11 @@ document.addEventListener('DOMContentLoaded', function() {
             sendMessage();
         });
     });
+    
+    // Clear document context handler
+    if (clearDocumentContext) {
+        clearDocumentContext.addEventListener('click', clearDocumentContextHandler);
+    }
     
     async function sendMessage() {
         const message = messageInput.value.trim();
@@ -282,17 +238,25 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const token = localStorage.getItem("access_token");
             
+            // Prepare request body
+            const requestBody = {
+                query: message,
+                language: language,
+                query_type: "general"
+            };
+            
+            // Add document_id if we have document context
+            if (currentDocumentId) {
+                requestBody.document_id = parseInt(currentDocumentId);
+            }
+            
             const res = await fetch("/api/v1/query/ask", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                     ...(token ? { "Authorization": "Bearer " + token } : {})
                 },
-                body: JSON.stringify({
-                    query: message,
-                    language: language,
-                    query_type: "general"
-                })
+                body: JSON.stringify(requestBody)
             });
             
             const data = await res.json();
@@ -301,7 +265,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (res.ok) {
                 addMessageToChat(data.response, 'ai');
             } else if (res.status === 401) {
-                addMessageToChat("⚠️ Error: Not authenticated. Please log in to save your query history.", 'ai');
+                // Token might be invalid, try to refresh auth state
+                await window.authUtils.verifyToken();
+                addMessageToChat("⚠️ Authentication issue detected. Your query was processed, but please log in to save your history.", 'ai');
             } else {
                 addMessageToChat("⚠️ Error: " + (data.detail || "Could not process query."), 'ai');
             }
@@ -312,7 +278,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    function addMessageToChat(message, sender) {
+    // Make addMessageToChat globally available for auth system
+    window.addMessageToChat = function(message, sender) {
         const messageDiv = document.createElement('div');
         messageDiv.className = 'flex ' + (sender === 'user' ? 'justify-end' : '');
         
@@ -358,9 +325,9 @@ document.addEventListener('DOMContentLoaded', function() {
             sendMessage();
         }
     });
-
-    // Initial UI update
-    updateAuthUI();
+    
+    // Initialize document context on page load
+    loadDocumentContext();
 });
 </script>
 {% endblock %}

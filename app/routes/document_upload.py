@@ -175,3 +175,87 @@ async def get_document(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error fetching document details."
         )
+@router.get("/{document_id}")
+async def get_document(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get specific document details"""
+    try:
+        document = db.query(Document).filter(
+            Document.id == document_id,
+            Document.user_id == current_user.id
+        ).first()
+        
+        if not document:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document not found"
+            )
+        
+        return {
+            "id": document.id,
+            "filename": document.filename,
+            "extracted_text": document.extracted_text,
+            "analysis_result": document.analysis_result,
+            "upload_date": document.upload_date
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching document: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error fetching document details."
+        )
+
+@router.delete("/{document_id}")
+async def delete_document(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a specific document"""
+    try:
+        document = db.query(Document).filter(
+            Document.id == document_id,
+            Document.user_id == current_user.id
+        ).first()
+        
+        if not document:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document not found"
+            )
+        
+        # Store file path before deletion
+        file_path = document.file_path
+        
+        # Delete from database
+        db.delete(document)
+        db.commit()
+        
+        # Delete physical file if it exists
+        if file_path and os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+                logger.info(f"Deleted file: {file_path}")
+            except OSError as e:
+                logger.warning(f"Could not delete file {file_path}: {str(e)}")
+        
+        return {
+            "message": "Document deleted successfully",
+            "deleted_document": {
+                "id": document.id,
+                "filename": document.filename
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting document: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error deleting document."
+        )
