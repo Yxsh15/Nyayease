@@ -201,5 +201,4 @@ The application uses the following SQLAlchemy models for its database:
 *   `content` (Text)
 *   `embedding_id` (String) # Reference to vector store
 
-## License
-This project is licensed under the MIT License.
+
